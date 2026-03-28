@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>音波の干渉シミュレーション</title>
+    <style>
+        /* --- 画面全体を1画面に収める設定 --- */
+        * {
+            box-sizing: border-box;
+        }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden; /* スクロールを完全に禁止 */
+            background-color: #f0f2f5;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #333;
+        }
+
+        .app-container {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            height: 100%;
+            padding: 10px 15px;
+            gap: 12px;
+        }
+
+        /* --- ヘッダー領域 --- */
+        header {
+            flex: 0 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 20px;
+            color: #0066cc;
+        }
+
+        .header-info {
+            font-size: 13px;
+            color: #555;
+            background: #fff8e1;
+            padding: 6px 12px;
+            border-radius: 4px;
+            border: 1px dashed #ffd54f;
+        }
+
+        /* --- 上部 2/3：アニメーションキャンバス --- */
+        .canvas-wrapper {
+            flex: 2; /* 縦方向の割合を2に */
+            min-height: 0; /* flexアイテムの縮小を許可 */
+            background: #ffffff;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+            position: relative;
+            overflow: hidden; /* はみ出した波を隠す */
+        }
+
+        canvas#simCanvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* --- 下部 1/3：コントロールパネル --- */
+        .bottom-panel {
+            flex: 1; /* 縦方向の割合を1に */
+            min-height: 0;
+            display: flex;
+            flex-direction: row;
+            gap: 15px;
+        }
+
+        .panel-col {
+            flex: 1; /* 3列を均等に配置 */
+            background: #ffffff;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            overflow-y: auto;
+        }
+
+        /* --- パネル内の共通UIパーツ --- */
+        .control-group {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 6px;
+            border: 1px solid #eaeaea;
+            border-left: 4px solid #0066cc;
+            margin: 0;
+        }
+
+        .control-group label.main-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            font-weight: bold;
+            margin-bottom: 2px;
+            color: #444;
+        }
+
+        .control-title {
+            font-size: 13px;
+            font-weight: bold;
+            margin-bottom: 6px;
+        }
+        
+        .sub-info {
+            font-size: 11px;
+            color: #777;
+            margin-bottom: 6px;
+            text-align: right;
+        }
+
+        .value-display {
+            color: #0066cc;
+            font-family: monospace;
+            font-size: 15px;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            margin: 0;
+            cursor: pointer;
+            accent-color: #0066cc;
+        }
+
+        .radio-group, .checkbox-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .radio-group label, .checkbox-group label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-weight: normal;
+            cursor: pointer;
+            color: #333;
+            font-size: 13px;
+        }
+
+        .flex-row-split {
+            display: flex;
+            flex-direction: row;
+            gap: 10px;
+            flex: 1;
+        }
+
+        .legend {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+            gap: 8px 12px;
+            font-size: 12px;
+            background: #f8f9fa;
+            padding: 8px;
+            border-radius: 6px;
+            margin-top: auto;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .line-sample {
+            display: inline-block;
+            width: 20px;
+            height: 0;
+        }
+
+        /* --- オシロスコープ部分 --- */
+        .chart-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+
+        .chart-title {
+            font-size: 13px;
+            font-weight: bold;
+            color: #555;
+            margin-bottom: 6px;
+            text-align: center;
+        }
+
+        canvas#chartCanvas {
+            flex: 1;
+            width: 100%;
+            min-height: 0;
+            background-color: #fafafa;
+            border: 1px solid #eee;
+            border-radius: 4px;
+        }
+
+        button {
+            background: #0066cc;
+            color: #fff;
+            border: none;
+            padding: 10px;
+            font-size: 14px;
+            font-weight: bold;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-top: auto;
+        }
+
+        button:hover {
+            background: #0052a3;
+        }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <header>
+        <h1>音波の干渉モデル</h1>
+        <div class="header-info">💡 緑色の丸（マイク）をドラッグして、波形の変化や補助線上での振幅を確認できます。</div>
+    </header>
+
+    <!-- 上部 2/3：アニメーションキャンバス -->
+    <div class="canvas-wrapper">
+        <!-- 論理サイズを横長(800x400)に設定。CSSで縮小表示されます -->
+        <canvas id="simCanvas" width="800" height="400"></canvas>
+    </div>
+
+    <!-- 下部 1/3：コントロール群 -->
+    <div class="bottom-panel">
+        
+        <!-- 列1：スライダー設定 -->
+        <div class="panel-col">
+            <div class="control-group">
+                <label class="main-label">振動数 (f) <span class="value-display"><span id="freqVal">850</span> Hz</span></label>
+                <div class="sub-info">音速 340 m/s （波長 λ = <span id="wlDisplay">0.40</span> m）</div>
+                <input type="range" id="freqSlider" min="340" max="1700" step="10" value="850">
+            </div>
+
+            <div class="control-group">
+                <label class="main-label">スピーカーの間隔 (d) <span class="value-display"><span id="speakerDistVal">1.50</span> m</span></label>
+                <div class="sub-info" style="height: 6px;"></div> <!-- 余白調整 -->
+                <input type="range" id="speakerDist" min="0" max="300" value="150">
+            </div>
+
+            <div class="control-group">
+                <label class="main-label">波の進行スピード <span class="value-display">x<span id="speedVal">1.0</span></span></label>
+                <div class="sub-info">見た目の速さ（物理的な音速は不変）</div>
+                <input type="range" id="speedSlider" min="0.0" max="3.0" step="0.1" value="1.0">
+            </div>
+        </div>
+
+        <!-- 列2：位相、補助線、凡例 -->
+        <div class="panel-col">
+            <div class="flex-row-split">
+                <div class="control-group" style="flex: 1; border-left-color: #ff9900;">
+                    <div class="control-title" style="color: #d87b00;">位相（動き）</div>
+                    <div class="radio-group">
+                        <label><input type="radio" name="phase" value="0" checked> 同位相（一緒に）</label>
+                        <label><input type="radio" name="phase" value="180"> 逆位相（交互に）</label>
+                    </div>
+                </div>
+
+                <div class="control-group" style="flex: 1; border-left-color: #333;">
+                    <div class="control-title" style="color: #333;">補助線の表示</div>
+                    <div class="checkbox-group">
+                        <label><input type="checkbox" id="showAntinodeLines" checked> 腹線（実線）</label>
+                        <label><input type="checkbox" id="showNodeLines" checked> 節線（点線）</label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="legend">
+                <div class="legend-item"><span class="line-sample" style="border-top: 2px solid rgba(220, 0, 0, 0.9);"></span> <b>山（密）</b></div>
+                <div class="legend-item"><span class="line-sample" style="border-top: 2px solid rgba(255, 160, 160, 0.8);"></span> <b>谷（疎）</b></div>
+                <div class="legend-item"><span class="line-sample" style="border-top: 2px solid rgba(0, 0, 0, 0.8);"></span> <b>腹線</b>(強め合う)</div>
+                <div class="legend-item"><span class="line-sample" style="border-top: 2px dashed rgba(0, 0, 0, 0.6);"></span> <b>節線</b>(弱め合う)</div>
+            </div>
+        </div>
+
+        <!-- 列3：オシロスコープ、再生ボタン -->
+        <div class="panel-col">
+            <div class="chart-container">
+                <div class="chart-title">マイク位置の振動（オシロスコープ）</div>
+                <canvas id="chartCanvas" width="400" height="150"></canvas>
+            </div>
+            <button id="pauseBtn">▶ 再生 (Space)</button>
+        </div>
+
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('simCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    const chartCanvas = document.getElementById('chartCanvas');
+    const chartCtx = chartCanvas.getContext('2d');
+
+    // --- 物理定数とシミュレーション設定 ---
+    const SOUND_SPEED_M_S = 340; 
+    const PX_PER_M = 150; // キャンバス解像度低下に合わせて調整し軽量化
+    const BASE_SPEED = 1.6; // 基準となるアニメーション速度
+
+    let totalWaveDistance = 0; // アニメーションの進行度（時間ではなく進行距離で管理）
+    let speedMultiplier = 1.0; // 倍率
+    let isPaused = true; // 初期状態を停止に
+    let freq = 850; 
+    let speakerDistPx = 150 * (PX_PER_M / 100); 
+    let phaseDiff = 0; 
+    let showAntinodeLines = true;
+    let showNodeLines = true;
+
+    // マイク（キャンバスサイズに合わせて初期位置を調整）
+    let mic = { x: 400, y: 200 };
+    let isDraggingMic = false;
+
+    // --- 補助線のキャッシュ用 ---
+    let antinodePath = new Path2D();
+    let nodePath = new Path2D();
+
+    // UI要素
+    const freqSlider = document.getElementById('freqSlider');
+    const speakerDistSlider = document.getElementById('speakerDist');
+    const speedSlider = document.getElementById('speedSlider');
+    const freqVal = document.getElementById('freqVal');
+    const wlDisplay = document.getElementById('wlDisplay');
+    const speakerDistVal = document.getElementById('speakerDistVal');
+    const speedVal = document.getElementById('speedVal');
+    const phaseRadios = document.getElementsByName('phase');
+    const chkAntinode = document.getElementById('showAntinodeLines');
+    const chkNode = document.getElementById('showNodeLines');
+    const pauseBtn = document.getElementById('pauseBtn');
+
+    // --- キャンバスのサイズを枠に合わせて広げる ---
+    function resizeCanvas() {
+        const wrapper = document.querySelector('.canvas-wrapper');
+        canvas.width = wrapper.clientWidth;
+        canvas.height = wrapper.clientHeight;
+        
+        // 画面が縮んでマイクが外に出た場合は中央に戻す
+        if (mic.x > canvas.width || mic.y > canvas.height) {
+            mic.x = canvas.width / 2;
+            mic.y = canvas.height / 2;
+        }
+
+        updatePathCache();
+    }
+    window.addEventListener('resize', resizeCanvas);
+
+    // --- 補助線のパスを事前に計算してキャッシュする関数（超軽量化） ---
+    function updatePathCache() {
+        antinodePath = new Path2D();
+        nodePath = new Path2D();
+        
+        const waveLengthM = SOUND_SPEED_M_S / freq;
+        const waveLengthPx = waveLengthM * PX_PER_M;
+        const c = speakerDistPx / 2;
+        const max_m = Math.ceil((speakerDistPx / waveLengthPx) * 2);
+
+        const s_center_x = canvas.width / 2;
+        const s_center_y = canvas.height * 0.8; 
+
+        function buildHyperbolaPath(path, a, c, cx, cy) {
+            if (a === 0) {
+                path.moveTo(cx, 0);
+                path.lineTo(cx, canvas.height);
+                return;
+            }
+            let b2 = c * c - a * a;
+            let b = Math.sqrt(b2);
+            const y_min = -cy;
+            const y_max = canvas.height - cy;
+            const step = 2; // 滑らかな曲線にするため、ステップ幅を2に細かく設定（キャッシュされるため動作は重くなりません）
+
+            for (let y = y_min; y <= y_max + step; y += step) {
+                let x = a * Math.sqrt(1 + (y * y) / b2);
+                if (y === y_min) path.moveTo(cx + x, cy + y);
+                else path.lineTo(cx + x, cy + y);
+            }
+            for (let y = y_min; y <= y_max + step; y += step) {
+                let x = -a * Math.sqrt(1 + (y * y) / b2);
+                if (y === y_min) path.moveTo(cx + x, cy + y);
+                else path.lineTo(cx + x, cy + y);
+            }
+        }
+
+        if (showAntinodeLines) {
+            for (let m = 0; m <= max_m; m++) {
+                let delta_d = (phaseDiff === 0) ? m * waveLengthPx : (m + 0.5) * waveLengthPx;
+                let a = delta_d / 2;
+                if (a >= c) continue; 
+                buildHyperbolaPath(antinodePath, a, c, s_center_x, s_center_y);
+            }
+        }
+        if (showNodeLines) {
+            for (let m = 0; m <= max_m; m++) {
+                let delta_d = (phaseDiff === 0) ? (m + 0.5) * waveLengthPx : m * waveLengthPx;
+                let a = delta_d / 2;
+                if (a >= c) continue; 
+                buildHyperbolaPath(nodePath, a, c, s_center_x, s_center_y);
+            }
+        }
+    }
+
+    function updatePhysicsValues() {
+        const waveLengthM = SOUND_SPEED_M_S / freq;
+        wlDisplay.textContent = waveLengthM.toFixed(2);
+        
+        const distM = parseInt(speakerDistSlider.value) / 100;
+        speakerDistPx = distM * PX_PER_M;
+        speakerDistVal.textContent = distM.toFixed(2);
+        
+        updatePathCache(); // 値が変わったらキャッシュを更新
+    }
+
+    freqSlider.addEventListener('input', (e) => {
+        freq = parseInt(e.target.value);
+        freqVal.textContent = freq;
+        updatePhysicsValues();
+    });
+
+    speakerDistSlider.addEventListener('input', updatePhysicsValues);
+
+    speedSlider.addEventListener('input', (e) => {
+        speedMultiplier = parseFloat(e.target.value);
+        speedVal.textContent = speedMultiplier.toFixed(1);
+    });
+
+    phaseRadios.forEach(radio => {
+        radio.addEventListener('change', (e) => {
+            phaseDiff = e.target.value === "180" ? Math.PI : 0;
+            updatePathCache();
+        });
+    });
+
+    chkAntinode.addEventListener('change', (e) => {
+        showAntinodeLines = e.target.checked;
+        updatePathCache();
+    });
+
+    chkNode.addEventListener('change', (e) => {
+        showNodeLines = e.target.checked;
+        updatePathCache();
+    });
+
+    // 再生・一時停止のトグル処理
+    function togglePause() {
+        isPaused = !isPaused;
+        pauseBtn.textContent = isPaused ? "▶ 再生 (Space)" : "❚❚ 一時停止 (Space)";
+    }
+
+    pauseBtn.addEventListener('click', togglePause);
+
+    // スペースキーでの操作とスクロール防止
+    document.addEventListener('keydown', (e) => {
+        if (e.code === 'Space') {
+            // フォーカスが入力要素やボタンにある場合は、Enter等と同じ挙動になるのを防ぐ
+            if (['INPUT', 'TEXTAREA', 'BUTTON', 'SELECT'].includes(document.activeElement.tagName)) {
+                e.preventDefault();
+                document.activeElement.blur(); // フォーカスを外す
+            } else {
+                e.preventDefault(); // 画面のスクロールを防ぐ
+            }
+            togglePause();
+        }
+    });
+
+    // マイクのドラッグ操作
+    function getMousePos(evt) {
+        const rect = canvas.getBoundingClientRect();
+        let clientX = evt.clientX;
+        let clientY = evt.clientY;
+        if (evt.touches && evt.touches.length > 0) {
+            clientX = evt.touches[0].clientX;
+            clientY = evt.touches[0].clientY;
+        }
+        return {
+            x: clientX - rect.left,
+            y: clientY - rect.top
+        };
+    }
+
+    function onPointerDown(e) {
+        const pos = getMousePos(e);
+        const dist = Math.hypot(pos.x - mic.x, pos.y - mic.y);
+        if (dist < 30) {
+            isDraggingMic = true;
+            if (e.cancelable) e.preventDefault();
+        }
+    }
+
+    function onPointerMove(e) {
+        const pos = getMousePos(e);
+        if (isDraggingMic) {
+            mic.x = Math.max(20, Math.min(canvas.width - 20, pos.x));
+            mic.y = Math.max(20, Math.min(canvas.height - 20, pos.y));
+            canvas.style.cursor = 'grabbing';
+            if (e.cancelable) e.preventDefault();
+        } else {
+            const dist = Math.hypot(pos.x - mic.x, pos.y - mic.y);
+            canvas.style.cursor = dist < 30 ? 'grab' : 'default';
+        }
+    }
+
+    function onPointerUp() {
+        isDraggingMic = false;
+        canvas.style.cursor = 'default';
+    }
+
+    canvas.addEventListener('mousedown', onPointerDown);
+    canvas.addEventListener('mousemove', onPointerMove);
+    window.addEventListener('mouseup', onPointerUp);
+    canvas.addEventListener('touchstart', onPointerDown, {passive: false});
+    canvas.addEventListener('touchmove', onPointerMove, {passive: false});
+    window.addEventListener('touchend', onPointerUp);
+
+    resizeCanvas(); // 初回のサイズ合わせ
+    updatePhysicsValues();
+
+    // --- メイン描画ループ ---
+    function draw() {
+        if (!isPaused) {
+            totalWaveDistance += BASE_SPEED * speedMultiplier; 
+        }
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // スピーカーの中心と位置
+        const s_center_x = canvas.width / 2;
+        const s_center_y = canvas.height * 0.8; 
+        const s1_x = s_center_x - speakerDistPx / 2;
+        const s1_y = s_center_y; 
+        const s2_x = s_center_x + speakerDistPx / 2;
+        const s2_y = s_center_y;
+
+        const waveLengthM = SOUND_SPEED_M_S / freq;
+        const waveLengthPx = waveLengthM * PX_PER_M;
+        const k = (2 * Math.PI) / waveLengthPx;
+
+        // 画面の対角線の長さを最大半径とする（毎フレームの複雑な計算を1回に省略して軽量化）
+        const maxRadius = Math.hypot(canvas.width, canvas.height);
+
+        // --- 波面の描画（先に波面を描画する） ---
+        function drawRings(x, y, phaseShift) {
+            let baseDist = (totalWaveDistance + phaseShift) % waveLengthPx;
+            if (baseDist < 0) baseDist += waveLengthPx;
+
+            ctx.lineWidth = 1; // 線の太さを 2 から 1 に細くして繊細に
+            
+            // 山（実線）の描画：色を濃い赤に変更
+            ctx.strokeStyle = "rgba(220, 0, 0, 0.75)"; 
+            ctx.setLineDash([]);
+            ctx.beginPath();
+            for (let r = baseDist + waveLengthPx / 4; r < maxRadius; r += waveLengthPx) {
+                if (r > 0) {
+                    ctx.moveTo(x + r, y);
+                    ctx.arc(x, y, r, 0, Math.PI * 2);
+                }
+            }
+            ctx.stroke();
+
+            // 谷（実線：薄い赤に変更）
+            ctx.strokeStyle = "rgba(255, 160, 160, 0.5)"; 
+            ctx.beginPath();
+            for (let r = baseDist + 3 * waveLengthPx / 4; r < maxRadius; r += waveLengthPx) {
+                if (r > 0) {
+                    ctx.moveTo(x + r, y);
+                    ctx.arc(x, y, r, 0, Math.PI * 2);
+                }
+            }
+            ctx.stroke();
+        }
+
+        drawRings(s1_x, s1_y, 0);
+        const phaseShift2 = (phaseDiff === Math.PI) ? waveLengthPx / 2 : 0;
+        drawRings(s2_x, s2_y, phaseShift2);
+
+        // --- 腹線の描画（実線：波が細くなったので少し控えめに） ---
+        if (showAntinodeLines) {
+            ctx.strokeStyle = "rgba(0, 0, 0, 0.85)";
+            ctx.lineWidth = 2.0; 
+            ctx.setLineDash([]); 
+            ctx.stroke(antinodePath); // キャッシュされたパスを一瞬で描画
+        }
+
+        // --- 節線の描画（点線） ---
+        if (showNodeLines) {
+            ctx.strokeStyle = "rgba(0, 0, 0, 0.6)";
+            ctx.lineWidth = 2.0;
+            ctx.setLineDash([6, 6]); 
+            ctx.stroke(nodePath); // キャッシュされたパスを一瞬で描画
+            ctx.setLineDash([]); 
+        }
+
+        // --- スピーカーの描画 ---
+        function drawSpeaker(x, y) {
+            ctx.fillStyle = "#333";
+            ctx.fillRect(x - 20, y - 15, 40, 30);
+            ctx.fillStyle = "#ddd";
+            ctx.beginPath();
+            ctx.arc(x, y, 10, 0, Math.PI*2);
+            ctx.fill();
+        }
+
+        drawSpeaker(s1_x, s1_y);
+        drawSpeaker(s2_x, s2_y);
+
+        // --- マイクの振幅計算（オシロスコープ用） ---
+        const md1 = Math.hypot(mic.x - s1_x, mic.y - s1_y);
+        const md2 = Math.hypot(mic.x - s2_x, mic.y - s2_y);
+        
+        const amp1 = 80 / (Math.sqrt(md1) + 5);
+        const amp2 = 80 / (Math.sqrt(md2) + 5);
+        
+        const current_val = amp1 * Math.sin(k * md1 - k * totalWaveDistance) + 
+                            amp2 * Math.sin(k * md2 - k * totalWaveDistance + phaseDiff);
+
+        // マイクの描画
+        ctx.fillStyle = "#00cc44";
+        ctx.strokeStyle = "#fff";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(mic.x, mic.y, 12, 0, Math.PI*2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = "#000";
+        ctx.beginPath();
+        ctx.arc(mic.x, mic.y, 4, 0, Math.PI*2);
+        ctx.fill();
+
+        // --- オシロスコープの描画 ---
+        chartCtx.clearRect(0, 0, chartCanvas.width, chartCanvas.height);
+        
+        chartCtx.strokeStyle = "#eee";
+        chartCtx.lineWidth = 1;
+        for(let i=1; i<4; i++) {
+            chartCtx.beginPath();
+            chartCtx.moveTo(0, chartCanvas.height * i / 4);
+            chartCtx.lineTo(chartCanvas.width, chartCanvas.height * i / 4);
+            chartCtx.stroke();
+        }
+
+        chartCtx.strokeStyle = "#aaa";
+        chartCtx.beginPath();
+        chartCtx.moveTo(0, chartCanvas.height / 2);
+        chartCtx.lineTo(chartCanvas.width, chartCanvas.height / 2);
+        chartCtx.stroke();
+
+        chartCtx.strokeStyle = "#00aa00";
+        chartCtx.lineWidth = 2.5;
+        chartCtx.beginPath();
+        
+        const num_cycles = 2.5; 
+        const max_display_amp = 18; 
+        const step = 4; // 1pxごとではなく、4pxごとに計算して処理を軽減
+
+        for (let x = 0; x <= chartCanvas.width; x += step) {
+            const display_y = current_val * Math.sin((x / chartCanvas.width) * Math.PI * 2 * num_cycles);
+            const plot_y = (chartCanvas.height / 2) - (display_y / max_display_amp) * (chartCanvas.height / 2);
+            
+            if (x === 0) chartCtx.moveTo(x, plot_y);
+            else chartCtx.lineTo(x, plot_y);
+        }
+        chartCtx.stroke();
+
+        requestAnimationFrame(draw);
+    }
+
+    draw();
+</script>
+</body>
+</html>
